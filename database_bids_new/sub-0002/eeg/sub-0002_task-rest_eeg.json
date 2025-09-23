@@ -1,9 +1,0 @@
-{
-    "TaskName": "rest",
-    "EEGReference": "unknown",
-    "SamplingFrequency": 500.0,
-    "PowerLineFrequency": 50,
-    "EEGChannelCount": 44,
-    "SoftwareFilters": "n/a",
-    "RecordingDuration": 147.998
-}
