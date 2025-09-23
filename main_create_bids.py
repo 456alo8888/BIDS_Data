@@ -11,10 +11,13 @@ from tqdm import tqdm
 
 # === Configuration ===
 # Paths
-xlsx_path = "/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/kqcls/matched_patients_translated_clean.xlsx"  # Replace with your matched patients XLSX path
-edf_dir = "/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/EEG2100/edf_files"  # Replace with your EDF folder path
-bids_dir = "/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/database_bids"  # BIDS output directory
-anonymous_xlsx_path = "./anonymous_patients.xlsx"  # Anonymous XLSX output
+
+##============= UNCOMMENT THIS TO RUN=============================
+
+# xlsx_path = "/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/kqcls/matched_patients_translated_clean.xlsx"  # Replace with your matched patients XLSX path
+# edf_dir = "/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/EEG2100/edf_files"  # Replace with your EDF folder path
+# bids_dir = "/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/database_bids"  # BIDS output directory
+# anonymous_xlsx_path = "./anonymous_patients.xlsx"  # Anonymous XLSX output
 
 # English column names
 doc_no_col = 'DOC_NO'

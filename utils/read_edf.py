@@ -40,5 +40,5 @@ def extract_edf_metadata(edf_file):
     print(f"Number / Birth suffix: {number}")
 
 # === Sử dụng ===
-edf_file = "/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/test_bids/sub-0/eeg/sub-01_task-rest_eeg_anon.edf"
+edf_file = "/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/test/FA5550A0_1-1+.edf"
 extract_edf_metadata(edf_file)

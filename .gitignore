@@ -1,4 +1,5 @@
 bids_database 
+kqcls
 EEG2100 
 bids_dataset 
 trash
@@ -10,3 +11,5 @@ test_bids
 mapping_original_to_sub.csv
 anonymous_patients.xlsx
 unmatched_edf_files.txt
+bids_testing
+test
