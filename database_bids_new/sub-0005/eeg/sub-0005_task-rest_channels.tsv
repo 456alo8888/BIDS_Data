@@ -1,0 +1,23 @@
+name	type	units	description	sampling_frequency	reference
+Fp1-Ref	eeg	uV	EEG channel	200.0	unknown
+Fp2-Ref	eeg	uV	EEG channel	200.0	unknown
+F3-Ref	eeg	uV	EEG channel	200.0	unknown
+F4-Ref	eeg	uV	EEG channel	200.0	unknown
+C3-Ref	eeg	uV	EEG channel	200.0	unknown
+C4-Ref	eeg	uV	EEG channel	200.0	unknown
+P3-Ref	eeg	uV	EEG channel	200.0	unknown
+P4-Ref	eeg	uV	EEG channel	200.0	unknown
+O1-Ref	eeg	uV	EEG channel	200.0	unknown
+O2-Ref	eeg	uV	EEG channel	200.0	unknown
+F7-Ref	eeg	uV	EEG channel	200.0	unknown
+F8-Ref	eeg	uV	EEG channel	200.0	unknown
+T3-Ref	eeg	uV	EEG channel	200.0	unknown
+T4-Ref	eeg	uV	EEG channel	200.0	unknown
+T5-Ref	eeg	uV	EEG channel	200.0	unknown
+T6-Ref	eeg	uV	EEG channel	200.0	unknown
+Fz-Ref	eeg	uV	EEG channel	200.0	unknown
+Cz-Ref	eeg	uV	EEG channel	200.0	unknown
+Pz-Ref	eeg	uV	EEG channel	200.0	unknown
+LOC-Ref	eeg	uV	EEG channel	200.0	unknown
+ROC-Ref	eeg	uV	EEG channel	200.0	unknown
+ECG	eeg	uV	EEG channel	200.0	unknown

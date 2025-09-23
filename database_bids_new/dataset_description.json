@@ -1,0 +1,8 @@
+{
+    "Name": "EEG Clinical Dataset",
+    "BIDSVersion": "1.8.0",
+    "Authors": [
+        "Your Name"
+    ],
+    "DatasetType": "raw"
+}

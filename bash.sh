@@ -1,0 +1,1 @@
+python non_test_create_bids.py --edf_dir "/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/test" --bids_dir "/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/database_bids_new"
