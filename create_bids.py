@@ -26,29 +26,30 @@ para_result_col = 'PARA_RESULT'
 unit_col = 'UNIT'  # Optional
 
 
-
-# === Function to extract EDF metadata ===
 def extract_edf_metadata(edf_file):
-    raw = mne.io.read_raw_edf(edf_file, preload=False, verbose=False)
-    subject_info = raw.info.get('subject_info', {})
+    try:
+        raw = mne.io.read_raw_edf(edf_file, preload=True, verbose=False)  # Preload for anonymization
+        subject_info = raw.info.get('subject_info', {})
 
-    # Extract sex
-    sex = subject_info.get('sex')
-    sex_str = "female" if sex == 0 else "male" if sex == 1 else "n/a"
+        # Debugging: Verify raw object type
+        print(f"Loaded EDF {edf_file}: raw object type = {type(raw)}")
 
-    # Extract last_name and birth suffix
-    last_name_raw = subject_info.get('last_name')
-    match_num = re.search(r'^(.*?)[_]?(\d+)?$', last_name_raw)
-    name_only = match_num.group(1).replace("_", " ").strip() if match_num else None
-    birth_suffix = match_num.group(2) if match_num else None
+        # Extract last_name and birth suffix
+        last_name_raw = subject_info.get('last_name', '')
+        match_num = re.search(r'^(.*?)[_]?(\d+)?$', last_name_raw)
+        name_only = match_num.group(1).replace("_", " ").strip() if match_num else None
+        birth_suffix = match_num.group(2) if match_num else None
 
-    # Extract additional EEG metadata
-    sampling_rate = raw.info['sfreq']
-    channel_types = {ch: 'eeg' for ch in raw.ch_names}  # Assuming all channels are EEG
-    recording_date = raw.info.get('meas_date')
+        # Extract additional metadata
+        sampling_rate = raw.info['sfreq']
+        channel_types = {ch: 'eeg' for ch in raw.ch_names}
+        recording_date = raw.info.get('meas_date')
 
-    return name_only, birth_suffix, sex_str, sampling_rate, channel_types, recording_date
-
+        return name_only, birth_suffix, sampling_rate, channel_types, recording_date, raw
+    except Exception as e:
+        print(f"Error reading EDF file {edf_file}: {e}")
+        return None, None, None, None, None, None
+    
 def extract_birth_year_suffix(birth_date):
     try:
         birth_date = pd.to_datetime(birth_date)
