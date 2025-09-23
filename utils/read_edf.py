@@ -16,9 +16,10 @@ def extract_edf_metadata(edf_file):
     subject_info = raw.info.get('subject_info', {})
     sex = subject_info.get('sex')
     last_name_raw = subject_info.get('last_name')
+    print(f"Loaded EDF {edf_file}: subject_info = {subject_info}")
 
     # convert sex code
-    sex_str = "Nữ" if sex == 0 else "Nam" if sex == 1 else "Unknown"
+    sex_str = 0 if sex == 0 else 1 if sex == 1 else "Unknown"
 
     # tách tên và số cuối
     name_only = None
@@ -39,5 +40,5 @@ def extract_edf_metadata(edf_file):
     print(f"Number / Birth suffix: {number}")
 
 # === Sử dụng ===
-edf_file = "/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/bids_database/sub-01/eeg/sub-01_task-rest_eeg.edf"
+edf_file = "/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/test_bids/sub-02/eeg/sub-02_task-rest_eeg_anon.edf"
 extract_edf_metadata(edf_file)
