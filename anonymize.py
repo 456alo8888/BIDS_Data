@@ -14,7 +14,7 @@ import logging
 # Configure logging
 logging.basicConfig(filename="anonymize_log.txt", level=logging.INFO, format="%(asctime)s - %(message)s")
 
-bids_root = "/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/bids_testing"
+bids_root = "/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/Small_BIDS"
 mapping_csv = os.path.join(bids_root, "mapping_original_to_sub_1.csv")
 skipped_csv = os.path.join(bids_root, "skipped_files.csv")
 overwrite = True  # False = create *_anon.edf, True = overwrite original (with backup)

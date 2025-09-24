@@ -9,7 +9,8 @@ import shutil
 import glob
 from tqdm import tqdm
 import argparse
-
+from collections import defaultdict
+from datetime import datetime
 
 
 
@@ -113,6 +114,7 @@ def calculate_age(birth_year: int | None, recording_date: datetime | None) -> in
 
 
 
+
 # def calculate_age(birth_year, recording_date):
 #     try:
 #         # Convert birth_date sang datetime (naive)
@@ -158,7 +160,6 @@ def standardize_name(name: str, remove_spaces: bool = False) -> str:
         clean = clean.replace(" ", "")
     return clean
 
-
 def build_database(args):
     edf_dir = args.edf_dir
     bids_dir = args.bids_dir
@@ -168,10 +169,12 @@ def build_database(args):
     # Lấy tất cả file .edf và .EDF trong edf_dir và các folder con
     edf_files = glob.glob(os.path.join(edf_dir, "**", "*.edf"), recursive=True)
     edf_files.extend(glob.glob(os.path.join(edf_dir, "**", "*.EDF"), recursive=True))
+    edf_groups = defaultdict(list)
+    for f in edf_files:
+        parent = os.path.dirname(f)  # folder chứa file EDF
+        edf_groups[parent].append(f)
 
-
-
-    # Create anonymous sub-ID for each .edf/.EDF files
+    # Tạo sub-xxxx cho mỗi folder thay vì mỗi file
     existing_subs = [d for d in os.listdir(bids_dir) if d.startswith('sub-') and os.path.isdir(os.path.join(bids_dir, d))]
     next_sub_id = len(existing_subs) + 1
 
@@ -179,146 +182,138 @@ def build_database(args):
     anonymous_data = []
     failed_files = []
     # Process EDF files with progress bar
-    for edf_file in tqdm(edf_files, desc="Processing EDF files"):
-        print(f"Processing {edf_file}...")
-
-        # Extract EDF metadata
-        name_only, sex, birth_suffix, sampling_rate, channel_types, recording_date, raw = extract_edf_metadata(edf_file)
-    
-        # Assign anonymous sub-ID
+    for folder, files in tqdm(edf_groups.items(), desc="Processing EDF folders"):
         sub_id = f"{next_sub_id:04d}"
         next_sub_id += 1
 
-
-
-        # Create BIDS directory for subject
         sub_dir = os.path.join(bids_dir, f"sub-{sub_id}")
         eeg_dir = os.path.join(sub_dir, "eeg")
         os.makedirs(eeg_dir, exist_ok=True)
 
-        # Export anonymized EDF
-        bids_edf = os.path.join(eeg_dir, f"sub-{sub_id}_task-rest_eeg.edf")
-        shutil.copy(edf_file, bids_edf)
+        print(f"Processing folder {folder} -> sub-{sub_id} with {len(files)} EDF files")
 
+        participant_info = None
+        run_counter = 1
 
-        if name_only is None:
-            print(f"⚠️ Failed to read {edf_file}, creating placeholder metadata.")
+        # Với mỗi file EDF trong folder này
+        for edf_file in files:
+            print(f"Processing {edf_file}...")
+
+            # Extract EDF metadata
+            name_only, sex, birth_suffix, sampling_rate, channel_types, recording_date, raw = extract_edf_metadata(edf_file)
+
+            run_id = f"{run_counter:03d}"
+            bids_base = f"sub-{sub_id}_task-rest_run-{run_id}"
+            bids_edf = os.path.join(eeg_dir, f"{bids_base}_eeg.edf")
+            shutil.copy(edf_file, bids_edf)
+
+            if name_only is None:
+                print(f"⚠️ Failed to read {edf_file}, creating placeholder metadata.")
+                
+                eeg_metadata = {
+                    "TaskName": "rest",
+                    "EEGReference": "unknown",
+                    "SamplingFrequency": "n/a",
+                    "PowerLineFrequency": "n/a",
+                    "EEGChannelCount": "n/a",
+                    "SoftwareFilters": "n/a",
+                    "RecordingDuration": "n/a",
+                    "Note": "⚠️ EDF file could not be parsed"
+                }
+                with open(os.path.join(eeg_dir, f"{bids_base}_eeg.json"), 'w') as f:
+                    json.dump(eeg_metadata, f, indent=4)
+
+                # channels.tsv placeholder
+                pd.DataFrame([{
+                    "name": "n/a",
+                    "type": "n/a",
+                    "units": "n/a",
+                    "description": "EDF file not readable",
+                    "sampling_frequency": "n/a",
+                    "reference": "unknown"
+                }]).to_csv(os.path.join(eeg_dir, f"{bids_base}_channels.tsv"), sep='\t', index=False)
+                failed_files.append(edf_file)
+
+            else:
+                #If metadata extracted from EDF file 
+                edf_name_std = unidecode.unidecode(name_only).upper()
+                print(f"EDF name: {name_only} (std: {edf_name_std}), birth_suffix: {birth_suffix} , sex: {sex}")
+
+                if participant_info is None:
+                    birth_year = extract_birth_year(raw.info.get('subject_info', {}), birth_suffix)
+                    age = calculate_age(birth_year, recording_date)
+                    sex_str = ("male" if sex == 2 else "female") if sex is not None else "n/a"
+                    participant_info = {
+                        "age": str(age) if age is not None else "n/a",
+                        "sex": sex_str,
+                        "group": "n/a"  # Adjust if group info available
+                    }
+
+                # Create eeg.json
+                eeg_metadata = {
+                    "TaskName": "rest",
+                    "EEGReference": "unknown",
+                    "SamplingFrequency": sampling_rate,
+                    "PowerLineFrequency": 50,  # Adjust if needed (50 Hz for Europe, 60 Hz for US)
+                    "EEGChannelCount": len(channel_types),
+                    "SoftwareFilters": "n/a",
+                    "RecordingDuration": raw.times[-1] if raw.times.size > 0 else "n/a"
+                }
+                with open(os.path.join(eeg_dir, f"{bids_base}_eeg.json"), 'w') as f:
+                    json.dump(eeg_metadata, f, indent=4)
+
+                # Create channels.tsv
+                channels_data = pd.DataFrame({
+                    "name": list(channel_types.keys()),
+                    "type": list(channel_types.values()),
+                    "units": ["uV"] * len(channel_types),
+                    "description": ["EEG channel"] * len(channel_types),
+                    "sampling_frequency": [sampling_rate] * len(channel_types),
+                    "reference": ["unknown"] * len(channel_types)
+                })
+                channels_data.to_csv(os.path.join(eeg_dir, f"{bids_base}_channels.tsv"), sep='\t', index=False)
+
+            # Create scans_file storing metadata of the recording session
+            scans_file = os.path.join(sub_dir, f"sub-{sub_id}_scans.tsv")
+            if recording_date and isinstance(recording_date,(datetime , ) ):
+                acq_time = recording_date.strftime("%Y-%m-%dT%H:%M:%S")
+            else:
+                acq_time = "n/a"
             
+            # Tạo dataframe với thông tin file ghi
+            scans_data_new = pd.DataFrame([{
+                "filename": os.path.relpath(bids_edf, start=sub_dir),  # relative path theo BIDS
+                "acq_time": acq_time
+            }])
 
-            eeg_metadata = {
-                "TaskName": "rest",
-                "EEGReference": "unknown",
-                "SamplingFrequency": "n/a",
-                "PowerLineFrequency": "n/a",
-                "EEGChannelCount": "n/a",
-                "SoftwareFilters": "n/a",
-                "RecordingDuration": "n/a",
-                "Note": "⚠️ EDF file could not be parsed"
-            }
-            with open(os.path.join(eeg_dir, f"sub-{sub_id}_task-rest_eeg.json"), 'w') as f:
-                json.dump(eeg_metadata, f, indent=4)
+            # Nếu file scans.tsv đã tồn tại thì append thêm, tránh ghi đè
+            if os.path.exists(scans_file):
+                existing_scans = pd.read_csv(scans_file, sep='\t')
+                scans_data = pd.concat([existing_scans, scans_data_new], ignore_index=True)
+            else:
+                scans_data = scans_data_new
 
-            # channels.tsv placeholder
-            pd.DataFrame([{
-                "name": "n/a",
-                "type": "n/a",
-                "units": "n/a",
-                "description": "EDF file not readable",
-                "sampling_frequency": "n/a",
-                "reference": "unknown"
-            }]).to_csv(os.path.join(eeg_dir, f"sub-{sub_id}_task-rest_channels.tsv"), sep='\t', index=False)
-            # Luôn thêm vào participants.tsv
-            anonymous_data.append({
-                "participant_id": f"sub-{sub_id}",
+            # Ghi ra file
+            scans_data.to_csv(scans_file, sep='\t', index=False)
+
+            run_counter += 1
+
+        # After processing all files in the folder, add participant info once
+        if participant_info is None:
+            participant_info = {
                 "age": "n/a",
                 "sex": "n/a",
                 "group": "n/a"
-            })
-            failed_files.append(sub_dir)
-
-        else:
-            #If metadata extracted from EDF file 
-            edf_name_std = unidecode.unidecode(name_only).upper()
-            print(f"EDF name: {name_only} (std: {edf_name_std}), birth_suffix: {birth_suffix} , sex: {sex}")
-
-            birth_year = extract_birth_year(raw.info.get('subject_info', {}), birth_suffix)
-            age = calculate_age(birth_year, recording_date)
-
-            # Create eeg.json
-            eeg_metadata = {
-                "TaskName": "rest",
-                "EEGReference": "unknown",
-                "SamplingFrequency": sampling_rate,
-                "PowerLineFrequency": 50,  # Adjust if needed (50 Hz for Europe, 60 Hz for US)
-                "EEGChannelCount": len(channel_types),
-                "SoftwareFilters": "n/a",
-                "RecordingDuration": raw.times[-1] if raw.times.size > 0 else "n/a"
             }
-            with open(os.path.join(eeg_dir, f"sub-{sub_id}_task-rest_eeg.json"), 'w') as f:
-                json.dump(eeg_metadata, f, indent=4)
-
-            # Create channels.tsv
-            channels_data = pd.DataFrame({
-                "name": list(channel_types.keys()),
-                "type": list(channel_types.values()),
-                "units": ["uV"] * len(channel_types),
-                "description": ["EEG channel"] * len(channel_types),
-                "sampling_frequency": [sampling_rate] * len(channel_types),
-                "reference": ["unknown"] * len(channel_types)
-            })
-            channels_data.to_csv(os.path.join(eeg_dir, f"sub-{sub_id}_task-rest_channels.tsv"), sep='\t', index=False)
-
-            
-            # Calculate age
-            # if args.data_name == "CMH":
-            #     # sex_info = ("male" if sex == 2 else "female") if sex is not None else "n/a"
-            #     sex_info = "n/a"
-            # elif args.data_name == "CMH_A7":
-            #     sex_info = ("male" if sex == 2 else "female") if sex is not None else "n/a"
-            # elif args.data_name == "CMH_C2B":
-            #     # sex_info = ("male" if sex == 2 else "female") if sex is not None else "n/a"
-            #     sex_info = "n/a"
-            # elif args.data_name == "108_Only":
-            #     # sex_info = ("male" if sex == 2 else "female") if sex is not None else "n/a"
-            #     sex_info = "n/a"
-            # else:
-            #     sex_info = "n/a"
-
-            # Add to anonymous data for participants.tsv
-            anonymous_data.append({
-                "participant_id": f"sub-{sub_id}",
-                "age": str(age) if age is not None else "n/a",
-                "sex": ("male" if sex == 2 else "female") if sex is not None else "n/a",
-                "group": "n/a"  # Adjust if group info available
-            })
-
-        # Create scans_file storing metadata of the recording session
-        scans_file = os.path.join(sub_dir, f"sub-{sub_id}_scans.tsv")
-        if recording_date and isinstance(recording_date, (datetime , )):
-            acq_time = recording_date.strftime("%Y-%m-%dT%H:%M:%S")
-        else:
-            acq_time = "n/a"
-        
-        # Tạo dataframe với thông tin file ghi
-        scans_data = pd.DataFrame([{
-            "filename": os.path.relpath(bids_edf, start=sub_dir),  # relative path theo BIDS
-            "acq_time": acq_time
-        }])
-
-        # Nếu file scans.tsv đã tồn tại thì append thêm, tránh ghi đè
-        if os.path.exists(scans_file):
-            existing_scans = pd.read_csv(scans_file, sep='\t')
-            scans_data = pd.concat([existing_scans, scans_data], ignore_index=True)
-
-        # Ghi ra file
-        scans_data.to_csv(scans_file, sep='\t', index=False)
+        anonymous_data.append({
+            "participant_id": f"sub-{sub_id}",
+            **participant_info
+        })
 
     # Sau vòng lặp: lưu danh sách file lỗi
     if failed_files:
         pd.DataFrame({"failed_file": failed_files}).to_csv(os.path.join(bids_dir, "failed_files.tsv"), sep='\t', index=False)
         print(f"⚠️ {len(failed_files)} EDF files failed to parse. See failed_files.tsv")
-        # Create BIDS root files
-    os.makedirs(bids_dir, exist_ok=True)
 
     # Create dataset_description.json
     dataset_description = {
@@ -361,6 +356,7 @@ def build_database(args):
             json.dump(participants_json, f, indent=4)
 
     print(f"BIDS dataset updated in: {bids_dir}")
+
 
 if __name__ == "__main__":
     args = get_args()

@@ -16,4 +16,6 @@ test
 database_bids_new
 final_database_bids 
 Test_EDF
-
+test_Small_BIDS 
+Small_BIDS 
+logging

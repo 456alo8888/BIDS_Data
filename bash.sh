@@ -1,4 +1,4 @@
-python non_test_create_bids.py --edf_dir "/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/Test_EDF" --bids_dir "/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/bids_testing"
+python non_test_create_bids.py --edf_dir "/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/Test_EDF" --bids_dir "/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/bids_testing_2"
 
 # python non_test_create_bids.py --dataset "CMH" --edf_dir "/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/BIDS/CMH" --bids_dir "/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/bids_testing"
 
@@ -9,3 +9,8 @@ python non_test_create_bids.py --edf_dir "/mnt/disk1/aiotlab/hieupc/New_CBraMod/
 # python non_test_create_bids.py --dataset "CMH_C2B" --edf_dir "/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/BIDS/CMH_C2B" --bids_dir "/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/bids_testing"
 
 # python non_test_create_bids.py --dataset "phutho" --edf_dir "/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/BIDS/phutho" --bids_dir "/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/bids_testing"
+
+
+# python with_test_main_create_bids.py --edf_dir "/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/EEG2100/edf_files" --bids_dir "./Small_BIDS" --test_result_dir "/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/kqcls/matched_patients_translated_clean.xlsx" --anonymous_xlsx_path "/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/EEG2100/patient_anonymous_list.xlsx"
+
+# python tmp.py --edf_dir "/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/EEG2100/edf_files" --bids_dir "./Small_BIDS_3" --anonymous_xlsx_path "/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/kqcls/matched_patients_translated_clean.xlsx"
