@@ -1,5 +1,7 @@
 import mne
 import re
+import glob
+import os
 
 def extract_edf_metadata(edf_file):
     """
@@ -12,7 +14,7 @@ def extract_edf_metadata(edf_file):
     except Exception as e:
         print(f"Failed to read EDF: {e}")
         return
-
+    recording_date = raw.info.get('meas_date')
     subject_info = raw.info.get('subject_info', {})
     sex = subject_info.get('sex')
     last_name_raw = subject_info.get('last_name')
@@ -38,7 +40,14 @@ def extract_edf_metadata(edf_file):
     print(f"Sex: {sex_str}")
     print(f"Full Name: {name_only}")
     print(f"Number / Birth suffix: {number}")
+    print(f"Recording Date: {recording_date}")
+
 
 # === Sử dụng ===
-edf_file = "/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/bids_testing/sub-0005/eeg/sub-0005_task-rest_eeg.edf"
-extract_edf_metadata(edf_file)
+edf_dir = "/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/test"
+
+edf_files = glob.glob(os.path.join(edf_dir, "**", "*.edf"), recursive=True)
+edf_files.extend(glob.glob(os.path.join(edf_dir, "**", "*.EDF"), recursive=True))
+
+for edf_file in edf_files:
+    extract_edf_metadata(edf_file)
