@@ -44,7 +44,7 @@ def extract_edf_metadata(edf_file):
 
 
 # === Sử dụng ===
-edf_dir = "/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/test"
+edf_dir = "/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/BIDS/CMH_C2B"
 
 edf_files = glob.glob(os.path.join(edf_dir, "**", "*.edf"), recursive=True)
 edf_files.extend(glob.glob(os.path.join(edf_dir, "**", "*.EDF"), recursive=True))

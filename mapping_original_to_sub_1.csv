@@ -1,6 +1,0 @@
-sub,orig_edf,anon_edf,original_patient_name,anon_patient_name
-sub-0001,/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/bids_testing/sub-0001/eeg/sub-0001_task-rest_eeg.edf,/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/bids_testing/sub-0001/eeg/sub-0001_task-rest_eeg.edf,NGUYEN THI LAN ANH 1,sub-0001
-sub-0002,/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/bids_testing/sub-0002/eeg/sub-0002_task-rest_eeg.edf,/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/bids_testing/sub-0002/eeg/sub-0002_task-rest_eeg.edf,HOANG THI QUYNH ANH,sub-0002
-sub-0003,/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/bids_testing/sub-0003/eeg/sub-0003_task-rest_eeg.edf,/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/bids_testing/sub-0003/eeg/sub-0003_task-rest_eeg.edf,TRAN NGOC THANH,sub-0003
-sub-0004,/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/bids_testing/sub-0004/eeg/sub-0004_task-rest_eeg.edf,/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/bids_testing/sub-0004/eeg/sub-0004_task-rest_eeg.edf,BUI THI NGHIA 1966 P,sub-0004
-sub-0005,/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/bids_testing/sub-0005/eeg/sub-0005_task-rest_eeg.edf,/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/bids_testing/sub-0005/eeg/sub-0005_task-rest_eeg.edf,sub-0005_task-rest_eeg.edf,sub-0005

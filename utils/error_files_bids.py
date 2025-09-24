@@ -29,13 +29,6 @@ def get_args():
         required=True,
         help="BIDS database output directory"
     )
-    # parser.add_argument(
-    #     "--data_name",
-    #     type=str,
-    #     default= "CMH",
-    #     required=True,
-    #     help="Type of dataset"
-    # )
     return parser.parse_args()
 
 def extract_edf_metadata(edf_file):
@@ -51,7 +44,6 @@ def extract_edf_metadata(edf_file):
             subject_info.get('first_name') or
             subject_info.get('his_id') or ''
         )
-        sex = subject_info.get('sex')
 
         if not last_name_raw:  # fallback sang filename
             last_name_raw = os.path.splitext(os.path.basename(edf_file))[0]
@@ -64,76 +56,33 @@ def extract_edf_metadata(edf_file):
         channel_types = {ch: 'eeg' for ch in raw.ch_names}
         recording_date = raw.info.get('meas_date')
 
-        return name_only, sex, birth_suffix, sampling_rate, channel_types, recording_date , raw
+        return name_only, birth_suffix, sampling_rate, channel_types, recording_date , raw
     except Exception as e:
         print(f"Error reading EDF file {edf_file}: {e}")
-        return None,None, None, None, None, None , None
+        return None, None, None, None, None , None
 
 
-def extract_birth_year(subject_info: dict, birth_suffix: str | None = None) -> int | None:
-    """
-    Trích năm sinh từ subject_info hoặc fallback bằng birth_suffix.
-    - Nếu có birthday -> parse lấy năm.
-    - Nếu không có -> thử birth_suffix, convert sang int, nếu >=1900 thì lấy làm năm sinh.
-    """
-    # Ưu tiên birthday trong subject_info
-    if subject_info and isinstance(subject_info, dict):
-        birthday = subject_info.get("birthday")
-        if birthday:
-            try:
-                dt = pd.to_datetime(birthday, errors="coerce")
-                if dt and not pd.isna(dt):
-                    return dt.year
-            except Exception:
-                pass
-
-    # Nếu không có birthday thì fallback sang birth_suffix
-    if birth_suffix:
-        try:
-            year_candidate = int(birth_suffix)
-            if year_candidate >= 1900 and year_candidate <= datetime.now().year:
-                return year_candidate
-        except ValueError:
-            pass
-
-    return None
-
-
-def calculate_age(birth_year: int | None, recording_date: datetime | None) -> int | None:
-    """
-    Tính tuổi dựa vào birth_year và recording_date.
-    Nếu không có birth_year hoặc recording_date thì trả về None.
-    """
-    if not birth_year or not recording_date:
-        return None
+def calculate_age(birth_date, recording_date):
     try:
-        return recording_date.year - birth_year
-    except Exception:
-        return None
+        # Convert birth_date sang datetime (naive)
+        birth_date = pd.to_datetime(birth_date).to_pydatetime().replace(tzinfo=None)
 
+        if recording_date:
+            # Chuẩn hóa recording_date (bỏ tzinfo nếu có)
+            if hasattr(recording_date, "tzinfo") and recording_date.tzinfo is not None:
+                recording_date = recording_date.replace(tzinfo=None)
 
+            # Tính tuổi chính xác (dựa trên ngày tháng năm)
+            age = recording_date.year - birth_date.year - (
+                (recording_date.month, recording_date.day) < (birth_date.month, birth_date.day)
+            )
 
-# def calculate_age(birth_year, recording_date):
-#     try:
-#         # Convert birth_date sang datetime (naive)
-#         birth_date = pd.to_datetime(birth_date).to_pydatetime().replace(tzinfo=None)
+            return age if age >= 0 else "n/a"
 
-#         if recording_date:
-#             # Chuẩn hóa recording_date (bỏ tzinfo nếu có)
-#             if hasattr(recording_date, "tzinfo") and recording_date.tzinfo is not None:
-#                 recording_date = recording_date.replace(tzinfo=None)
-
-#             # Tính tuổi chính xác (dựa trên ngày tháng năm)
-#             age = recording_date.year - birth_date.year - (
-#                 (recording_date.month, recording_date.day) < (birth_date.month, birth_date.day)
-#             )
-
-#             return age if age >= 0 else "n/a"
-
-#         return "n/a"
-#     except Exception as e:
-#         print(f"⚠️ Error in calculate_age: {e}")
-#         return "n/a"
+        return "n/a"
+    except Exception as e:
+        print(f"⚠️ Error in calculate_age: {e}")
+        return "n/a"
 
 # === Main Script ===
 
@@ -162,13 +111,10 @@ def standardize_name(name: str, remove_spaces: bool = False) -> str:
 def build_database(args):
     edf_dir = args.edf_dir
     bids_dir = args.bids_dir
-    # Create BIDS root files
-    os.makedirs(bids_dir, exist_ok=True)
-
     # Lấy tất cả file .edf và .EDF trong edf_dir và các folder con
     edf_files = glob.glob(os.path.join(edf_dir, "**", "*.edf"), recursive=True)
     edf_files.extend(glob.glob(os.path.join(edf_dir, "**", "*.EDF"), recursive=True))
-
+    failed_files =[]
 
 
     # Create anonymous sub-ID for each .edf/.EDF files
@@ -177,21 +123,12 @@ def build_database(args):
 
     # Collect anonymous patient data
     anonymous_data = []
-    failed_files = []
+    
     # Process EDF files with progress bar
     for edf_file in tqdm(edf_files, desc="Processing EDF files"):
         print(f"Processing {edf_file}...")
-
-        # Extract EDF metadata
-        name_only, sex, birth_suffix, sampling_rate, channel_types, recording_date, raw = extract_edf_metadata(edf_file)
-    
-        # Assign anonymous sub-ID
         sub_id = f"{next_sub_id:04d}"
         next_sub_id += 1
-
-
-
-        # Create BIDS directory for subject
         sub_dir = os.path.join(bids_dir, f"sub-{sub_id}")
         eeg_dir = os.path.join(sub_dir, "eeg")
         os.makedirs(eeg_dir, exist_ok=True)
@@ -200,10 +137,13 @@ def build_database(args):
         bids_edf = os.path.join(eeg_dir, f"sub-{sub_id}_task-rest_eeg.edf")
         shutil.copy(edf_file, bids_edf)
 
-
+        # Extract EDF metadata
+        name_only, birth_suffix, sampling_rate, channel_types, recording_date, raw = extract_edf_metadata(edf_file)
+        
         if name_only is None:
+
             print(f"⚠️ Failed to read {edf_file}, creating placeholder metadata.")
-            
+            failed_files.append(edf_file)
 
             eeg_metadata = {
                 "TaskName": "rest",
@@ -227,29 +167,13 @@ def build_database(args):
                 "sampling_frequency": "n/a",
                 "reference": "unknown"
             }]).to_csv(os.path.join(eeg_dir, f"sub-{sub_id}_task-rest_channels.tsv"), sep='\t', index=False)
-            # Luôn thêm vào participants.tsv
-            anonymous_data.append({
-                "participant_id": f"sub-{sub_id}",
-                "age": "n/a",
-                "sex": "n/a",
-                "group": "n/a"
-            })
-            failed_files.append(sub_dir)
 
-        else:
-            #If metadata extracted from EDF file 
-            edf_name_std = unidecode.unidecode(name_only).upper()
-            print(f"EDF name: {name_only} (std: {edf_name_std}), birth_suffix: {birth_suffix} , sex: {sex}")
-
-            birth_year = extract_birth_year(raw.info.get('subject_info', {}), birth_suffix)
-            age = calculate_age(birth_year, recording_date)
-
-            # Create eeg.json
+        else:  # file đọc OK
             eeg_metadata = {
                 "TaskName": "rest",
                 "EEGReference": "unknown",
                 "SamplingFrequency": sampling_rate,
-                "PowerLineFrequency": 50,  # Adjust if needed (50 Hz for Europe, 60 Hz for US)
+                "PowerLineFrequency": 50,
                 "EEGChannelCount": len(channel_types),
                 "SoftwareFilters": "n/a",
                 "RecordingDuration": raw.times[-1] if raw.times.size > 0 else "n/a"
@@ -257,7 +181,6 @@ def build_database(args):
             with open(os.path.join(eeg_dir, f"sub-{sub_id}_task-rest_eeg.json"), 'w') as f:
                 json.dump(eeg_metadata, f, indent=4)
 
-            # Create channels.tsv
             channels_data = pd.DataFrame({
                 "name": list(channel_types.keys()),
                 "type": list(channel_types.values()),
@@ -268,56 +191,17 @@ def build_database(args):
             })
             channels_data.to_csv(os.path.join(eeg_dir, f"sub-{sub_id}_task-rest_channels.tsv"), sep='\t', index=False)
 
+        # Luôn thêm vào participants.tsv
+        anonymous_data.append({
+            "participant_id": f"sub-{sub_id}",
+            "age": "n/a",
+            "sex": "n/a",
+            "group": "n/a"
+        })
             
-            # Calculate age
-            # if args.data_name == "CMH":
-            #     # sex_info = ("male" if sex == 2 else "female") if sex is not None else "n/a"
-            #     sex_info = "n/a"
-            # elif args.data_name == "CMH_A7":
-            #     sex_info = ("male" if sex == 2 else "female") if sex is not None else "n/a"
-            # elif args.data_name == "CMH_C2B":
-            #     # sex_info = ("male" if sex == 2 else "female") if sex is not None else "n/a"
-            #     sex_info = "n/a"
-            # elif args.data_name == "108_Only":
-            #     # sex_info = ("male" if sex == 2 else "female") if sex is not None else "n/a"
-            #     sex_info = "n/a"
-            # else:
-            #     sex_info = "n/a"
-
-            # Add to anonymous data for participants.tsv
-            anonymous_data.append({
-                "participant_id": f"sub-{sub_id}",
-                "age": str(age) if age is not None else "n/a",
-                "sex": ("male" if sex == 2 else "female") if sex is not None else "n/a",
-                "group": "n/a"  # Adjust if group info available
-            })
-
-        # Create scans_file storing metadata of the recording session
-        scans_file = os.path.join(sub_dir, f"sub-{sub_id}_scans.tsv")
-        if recording_date and isinstance(recording_date, (datetime , )):
-            acq_time = recording_date.strftime("%Y-%m-%dT%H:%M:%S")
-        else:
-            acq_time = "n/a"
         
-        # Tạo dataframe với thông tin file ghi
-        scans_data = pd.DataFrame([{
-            "filename": os.path.relpath(bids_edf, start=sub_dir),  # relative path theo BIDS
-            "acq_time": acq_time
-        }])
 
-        # Nếu file scans.tsv đã tồn tại thì append thêm, tránh ghi đè
-        if os.path.exists(scans_file):
-            existing_scans = pd.read_csv(scans_file, sep='\t')
-            scans_data = pd.concat([existing_scans, scans_data], ignore_index=True)
-
-        # Ghi ra file
-        scans_data.to_csv(scans_file, sep='\t', index=False)
-
-    # Sau vòng lặp: lưu danh sách file lỗi
-    if failed_files:
-        pd.DataFrame({"failed_file": failed_files}).to_csv(os.path.join(bids_dir, "failed_files.tsv"), sep='\t', index=False)
-        print(f"⚠️ {len(failed_files)} EDF files failed to parse. See failed_files.tsv")
-        # Create BIDS root files
+    # Create BIDS root files
     os.makedirs(bids_dir, exist_ok=True)
 
     # Create dataset_description.json

@@ -8,6 +8,7 @@ from datetime import datetime
 import shutil
 import glob
 from tqdm import tqdm
+import argparse
 
 # === Configuration ===
 # Paths
@@ -29,30 +30,100 @@ para_result_col = 'PARA_RESULT'
 unit_col = 'UNIT'  # Optional
 
 
+
+
+
+
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--edf_dir",
+        type=str,
+        default= "./test",
+        required=True,
+        help="Folder directory containing folder having .edf/.EDF files"
+    )
+    parser.add_argument(
+        "--bids_dir",
+        type=str,
+        default= "./database_bids",
+        required=True,
+        help="BIDS database output directory"
+    )
+    parser.add_argument(
+        "--test_result_dir",
+        type = str , 
+        default= "./matched_patients_translated_clean.xlsx",
+        require = True,
+        help = "Directory of test result"   
+    )
+
+    parser.add_argument(
+        "--anonymous_xlsx_path",
+        type=str,
+        default= "./anonymous_patients.xlsx",
+        required=True,
+        help="Anonymous XLSX output directory"
+    )
+    return parser.parse_args()
+
+# def extract_edf_metadata(edf_file):
+#     try:
+#         raw = mne.io.read_raw_edf(edf_file, preload=True, verbose=False)  # Preload for anonymization
+#         subject_info = raw.info.get('subject_info', {})
+
+#         # Debugging: Verify raw object type
+#         print(f"Loaded EDF {edf_file}: raw object type = {type(raw)}")
+
+#         # Extract last_name and birth suffix
+#         last_name_raw = subject_info.get('last_name', '')
+#         match_num = re.search(r'^(.*?)[_]?(\d+)?$', last_name_raw)
+#         name_only = match_num.group(1).replace("_", " ").strip() if match_num else None
+#         birth_suffix = match_num.group(2) if match_num else None
+
+#         # Extract additional metadata
+#         sampling_rate = raw.info['sfreq']
+#         channel_types = {ch: 'eeg' for ch in raw.ch_names}
+#         recording_date = raw.info.get('meas_date')
+
+#         return name_only, birth_suffix, sampling_rate, channel_types, recording_date, raw
+#     except Exception as e:
+#         print(f"Error reading EDF file {edf_file}: {e}")
+#         return None, None, None, None, None, None
+    
+
+
 def extract_edf_metadata(edf_file):
     try:
-        raw = mne.io.read_raw_edf(edf_file, preload=True, verbose=False)  # Preload for anonymization
-        subject_info = raw.info.get('subject_info', {})
+        raw = mne.io.read_raw_edf(edf_file, preload=False, verbose=False)
+        subject_info = raw.info.get('subject_info', {}) or {}
 
-        # Debugging: Verify raw object type
         print(f"Loaded EDF {edf_file}: raw object type = {type(raw)}")
 
-        # Extract last_name and birth suffix
-        last_name_raw = subject_info.get('last_name', '')
+        # Lấy last_name / first_name / his_id
+        last_name_raw = (
+            subject_info.get('last_name') or
+            subject_info.get('first_name') or
+            subject_info.get('his_id') or ''
+        )
+        sex = subject_info.get('sex')
+
+        if not last_name_raw:  # fallback sang filename
+            last_name_raw = os.path.splitext(os.path.basename(edf_file))[0]
+
         match_num = re.search(r'^(.*?)[_]?(\d+)?$', last_name_raw)
-        name_only = match_num.group(1).replace("_", " ").strip() if match_num else None
+        name_only = match_num.group(1).replace("_", " ").strip() if match_num else last_name_raw
         birth_suffix = match_num.group(2) if match_num else None
 
-        # Extract additional metadata
         sampling_rate = raw.info['sfreq']
         channel_types = {ch: 'eeg' for ch in raw.ch_names}
         recording_date = raw.info.get('meas_date')
 
-        return name_only, birth_suffix, sampling_rate, channel_types, recording_date, raw
+        return name_only, sex, birth_suffix, sampling_rate, channel_types, recording_date , raw
     except Exception as e:
         print(f"Error reading EDF file {edf_file}: {e}")
-        return None, None, None, None, None, None
-    
+        return None,None, None, None, None, None , None
+
 def extract_birth_year_suffix(birth_date):
     try:
         birth_date = pd.to_datetime(birth_date)
@@ -60,15 +131,6 @@ def extract_birth_year_suffix(birth_date):
     except:
         return None
 
-# def calculate_age(birth_date, recording_date):
-#     try:
-#         birth_date = pd.to_datetime(birth_date)
-#         if recording_date:
-#             age = (recording_date - birth_date).days // 365
-#             return age if age >= 0 else "n/a"
-#         return "n/a"
-#     except:
-#         return "n/a"
 
 
 def calculate_age(birth_date, recording_date):
@@ -95,24 +157,27 @@ def calculate_age(birth_date, recording_date):
 
 # === Main Script ===
 # Load matched patients XLSX
-try:
-    df = pd.read_excel(xlsx_path)
-except Exception as e:
-    print(f"Error reading XLSX file {xlsx_path}: {e}")
-    exit()
+def load_patient_xlsx(args):
+    xlsx_path = args.test_result_dir
+    try:
+        df = pd.read_excel(xlsx_path)
+    except Exception as e:
+        print(f"Error reading XLSX file {xlsx_path}: {e}")
+        exit()
 
-# Strip leading/trailing spaces from column names
-df.columns = df.columns.str.strip()
+    # Strip leading/trailing spaces from column names
+    df.columns = df.columns.str.strip()
 
-# Print column names for debugging
-print("Columns in matched patients XLSX:", df.columns.tolist())
+    # Print column names for debugging
+    print("Columns in matched patients XLSX:", df.columns.tolist())
 
-# Check for required columns
-required_columns = [doc_no_col, patient_name_col, birth_date_col, GENDER_col, hfl_name_col, para_result_col]
-missing_columns = [col for col in required_columns if col not in df.columns]
-if missing_columns:
-    print(f"Error: Missing required columns: {missing_columns}")
-    exit()
+    # Check for required columns
+    required_columns = [doc_no_col, patient_name_col, birth_date_col, GENDER_col, hfl_name_col, para_result_col]
+    missing_columns = [col for col in required_columns if col not in df.columns]
+    if missing_columns:
+        print(f"Error: Missing required columns: {missing_columns}")
+        exit()
+    return df
 
 
 def standardize_name(name: str, remove_spaces: bool = False) -> str:
@@ -135,188 +200,203 @@ def standardize_name(name: str, remove_spaces: bool = False) -> str:
         clean = clean.replace(" ", "")
     return clean
 
-# Áp dụng cho cột PATIENT_NAME
-df["PATIENT_NAME_STD"] = df["PATIENT_NAME"].apply(
-    lambda x: standardize_name(x, remove_spaces=False)
-)
 
-# Create BIRTH_YEAR suffix
-df['BIRTH_YEAR'] = df[birth_date_col].apply(extract_birth_year_suffix)
 
-# Group by DOC_NO for matching
-aggregated_df = df.groupby(doc_no_col).agg({
-    'PATIENT_NAME_STD': 'first',
-    birth_date_col: 'first',
-    GENDER_col: 'first'
-}).reset_index()
+def create_bids(args):
+    edf_dir = args.edf_dir
+    bids_dir = args.bids_dir 
+    anonymous_xlsx_path = args.anonymous_xlsx_path
+    df = load_patient_xlsx(args)
 
-# Get list of EDF files
-edf_files = glob.glob(os.path.join(edf_dir, "*.edf"))
+    # Áp dụng cho cột PATIENT_NAME
+    df["PATIENT_NAME_STD"] = df["PATIENT_NAME"].apply(
+        lambda x: standardize_name(x, remove_spaces=False)
+    )
 
-# Map DOC_NO to anonymous sub-ID
-sub_id_mapping = {}
-existing_subs = [d for d in os.listdir(bids_dir) if d.startswith('sub-') and os.path.isdir(os.path.join(bids_dir, d))]
-next_sub_id = len(existing_subs) + 1
+    # Create BIRTH_YEAR suffix
+    df['BIRTH_YEAR'] = df[birth_date_col].apply(extract_birth_year_suffix)
 
-# Collect anonymous patient data
-anonymous_data = []
+    # Group by DOC_NO for matching
+    aggregated_df = df.groupby(doc_no_col).agg({
+        'PATIENT_NAME_STD': 'first',
+        birth_date_col: 'first',
+        GENDER_col: 'first'
+    }).reset_index()
 
-# Process EDF files with progress bar
-for edf_file in tqdm(edf_files, desc="Processing EDF files"):
-    print(f"Processing {edf_file}...")
+    # Get list of EDF files
+    edf_files = glob.glob(os.path.join(edf_dir, "*.edf"))
 
-    # Extract EDF metadata
-    name_only, birth_suffix, sampling_rate, channel_types, recording_date, raw = extract_edf_metadata(edf_file)
-    if name_only is None:
-        continue
-    edf_name_std = unidecode.unidecode(name_only).upper()
+    # Map DOC_NO to anonymous sub-ID
+    sub_id_mapping = {}
+    existing_subs = [d for d in os.listdir(bids_dir) if d.startswith('sub-') and os.path.isdir(os.path.join(bids_dir, d))]
+    next_sub_id = len(existing_subs) + 1
 
-    #Debug matching inputs
-    print(f"EDF name: {name_only} (std: {edf_name_std}), birth_suffix: {birth_suffix}")
+    # Collect anonymous patient data
+    anonymous_data = []
 
-    # Match with aggregated_df
-    if birth_suffix and 'BIRTH_YEAR' in aggregated_df.columns and aggregated_df['BIRTH_YEAR'].notnull().any():
-        matched_row = aggregated_df[
-            (aggregated_df['PATIENT_NAME_STD'] == edf_name_std) &
-            (aggregated_df['BIRTH_YEAR'].str.endswith(str(birth_suffix), na=False))
-        ]
-    else:
-        matched_row = aggregated_df[
-            (aggregated_df['PATIENT_NAME_STD'] == edf_name_std)
-        ]
+    # Process EDF files with progress bar
+    for edf_file in tqdm(edf_files, desc="Processing EDF files"):
+        print(f"Processing {edf_file}...")
 
-    # Debug matching output
-    print(f"Number of matches: {len(matched_row)}")
-    if not matched_row.empty:
-        print(f"Sample matched row: {matched_row.iloc[0].to_dict()}")
+        # Extract EDF metadata
+        name_only, sex, birth_suffix, sampling_rate, channel_types, recording_date , raw = extract_edf_metadata(edf_file)
+        if name_only is None:
+            continue
 
-    if matched_row.empty:
-        print(f"No match found for EDF: {edf_file}")
-        with open("./unmatched_edf_files.txt", 'a') as f:
-            f.write(f"{edf_file}\n")
-        continue
+        edf_name_std = unidecode.unidecode(name_only).upper()
 
-    # Now safe to access iloc[0]
-    doc_no = matched_row[doc_no_col].iloc[0]
+        #Debug matching inputs
+        print(f"EDF name: {name_only} (std: {edf_name_std}), birth_suffix: {birth_suffix}")
 
-    # Assign anonymous sub-ID
-    if doc_no not in sub_id_mapping:
-        sub_id = f"{next_sub_id:02d}"
-        sub_id_mapping[doc_no] = sub_id
-        next_sub_id += 1
-    sub_id = sub_id_mapping[doc_no]
+        # Match with aggregated_df
+        if birth_suffix and 'BIRTH_YEAR' in aggregated_df.columns and aggregated_df['BIRTH_YEAR'].notnull().any():
+            matched_row = aggregated_df[
+                (aggregated_df['PATIENT_NAME_STD'] == edf_name_std) &
+                (aggregated_df['BIRTH_YEAR'].str.endswith(str(birth_suffix), na=False))
+            ]
+        else:
+            matched_row = aggregated_df[
+                (aggregated_df['PATIENT_NAME_STD'] == edf_name_std)
+            ]
 
-    # Anonymize EDF
-    raw.anonymize()
+        # Debug matching output
+        print(f"Number of matches: {len(matched_row)}")
+        if not matched_row.empty:
+            print(f"Sample matched row: {matched_row.iloc[0].to_dict()}")
 
-    # Create BIDS directory for subject
-    sub_dir = os.path.join(bids_dir, f"sub-{sub_id}")
-    eeg_dir = os.path.join(sub_dir, "eeg")
-    os.makedirs(eeg_dir, exist_ok=True)
+        if matched_row.empty:
+            print(f"No match found for EDF: {edf_file}")
+            with open("./unmatched_edf_files.txt", 'a') as f:
+                f.write(f"{edf_file}\n")
+            continue
 
-    # Export anonymized EDF
-    bids_edf = os.path.join(eeg_dir, f"sub-{sub_id}_task-rest_eeg.edf")
-    try:
-        raw.export(bids_edf, fmt='EDF', overwrite=True)
-    except Exception as e:
-        print(f"Warning: Failed to export EDF {edf_file}: {e}")
-        print(f"Copying original EDF file instead.")
-        shutil.copy(edf_file, bids_edf)
+        # Now safe to access iloc[0]
+        doc_no = matched_row[doc_no_col].iloc[0]
 
-    # Create eeg.json
-    eeg_metadata = {
-        "TaskName": "rest",
-        "EEGReference": "unknown",
-        "SamplingFrequency": sampling_rate,
-        "PowerLineFrequency": 50,  # Adjust if needed (50 Hz for Europe, 60 Hz for US)
-        "EEGChannelCount": len(channel_types),
-        "SoftwareFilters": "n/a",
-        "RecordingDuration": raw.times[-1] if raw.times.size > 0 else "n/a"
-    }
-    with open(os.path.join(eeg_dir, f"sub-{sub_id}_task-rest_eeg.json"), 'w') as f:
-        json.dump(eeg_metadata, f, indent=4)
+        # Assign anonymous sub-ID
+        if doc_no not in sub_id_mapping:
+            sub_id = f"{next_sub_id:04d}"
+            sub_id_mapping[doc_no] = sub_id
+            next_sub_id += 1
+        sub_id = sub_id_mapping[doc_no]
 
-    # Create channels.tsv
-    channels_data = pd.DataFrame({
-        "name": list(channel_types.keys()),
-        "type": list(channel_types.values()),
-        "units": ["uV"] * len(channel_types),
-        "description": ["EEG channel"] * len(channel_types),
-        "sampling_frequency": [sampling_rate] * len(channel_types),
-        "reference": ["unknown"] * len(channel_types)
-    })
-    channels_data.to_csv(os.path.join(eeg_dir, f"sub-{sub_id}_task-rest_channels.tsv"), sep='\t', index=False)
+        # Anonymize EDF
+        raw.anonymize()
 
-    # Calculate age
-    birth_date = matched_row[birth_date_col].iloc[0]
-    age = calculate_age(birth_date, recording_date)
+        # Create BIDS directory for subject
+        sub_dir = os.path.join(bids_dir, f"sub-{sub_id}")
+        eeg_dir = os.path.join(sub_dir, "eeg")
+        os.makedirs(eeg_dir, exist_ok=True)
 
-    # Add to anonymous data for participants.tsv
-    anonymous_data.append({
-        "participant_id": f"sub-{sub_id}",
-        "age": age,
-        "sex": matched_row[GENDER_col].iloc[0].lower() if pd.notnull(matched_row[GENDER_col].iloc[0]) else "n/a",
-        "group": "n/a"  # Adjust if group info available
-    })
+        # Export anonymized EDF
+        bids_edf = os.path.join(eeg_dir, f"sub-{sub_id}_task-rest_eeg.edf")
+        try:
+            raw.export(bids_edf, fmt='EDF', overwrite=True)
+        except Exception as e:
+            print(f"Warning: Failed to export EDF {edf_file}: {e}")
+            print(f"Copying original EDF file instead.")
+            shutil.copy(edf_file, bids_edf)
 
-# Create BIDS root files
-os.makedirs(bids_dir, exist_ok=True)
+        # Create eeg.json
+        eeg_metadata = {
+            "TaskName": "rest",
+            "EEGReference": "unknown",
+            "SamplingFrequency": sampling_rate,
+            "PowerLineFrequency": 50,  # Adjust if needed (50 Hz for Europe, 60 Hz for US)
+            "EEGChannelCount": len(channel_types),
+            "SoftwareFilters": "n/a",
+            "RecordingDuration": raw.times[-1] if raw.times.size > 0 else "n/a"
+        }
+        with open(os.path.join(eeg_dir, f"sub-{sub_id}_task-rest_eeg.json"), 'w') as f:
+            json.dump(eeg_metadata, f, indent=4)
 
-# Create dataset_description.json
-dataset_description = {
-    "Name": "EEG Clinical Dataset",
-    "BIDSVersion": "1.8.0",
-    "Authors": ["Your Name"],
-    "DatasetType": "raw"
-}
-with open(os.path.join(bids_dir, "dataset_description.json"), 'w') as f:
-    json.dump(dataset_description, f, indent=4)
+        # Create channels.tsv
+        channels_data = pd.DataFrame({
+            "name": list(channel_types.keys()),
+            "type": list(channel_types.values()),
+            "units": ["uV"] * len(channel_types),
+            "description": ["EEG channel"] * len(channel_types),
+            "sampling_frequency": [sampling_rate] * len(channel_types),
+            "reference": ["unknown"] * len(channel_types)
+        })
+        channels_data.to_csv(os.path.join(eeg_dir, f"sub-{sub_id}_task-rest_channels.tsv"), sep='\t', index=False)
 
-# Create participants.tsv and participants.json
-participants_df = pd.DataFrame(anonymous_data)
-participants_df.to_csv(os.path.join(bids_dir, "participants.tsv"), sep='\t', index=False)
+        # Calculate age
+        birth_date = matched_row[birth_date_col].iloc[0]
+        age = calculate_age(birth_date, recording_date)
 
-participants_json = {
-    "participant_id": {"Description": "Unique identifier for each participant"},
-    "age": {"Description": "Age of the participant in years", "Units": "years"},
-    "sex": {"Description": "Sex of the participant (male, female, or n/a)"},
-    "group": {"Description": "Clinical group"}
-}
-with open(os.path.join(bids_dir, "participants.json"), 'w') as f:
-    json.dump(participants_json, f, indent=4)
-
-# Create phenotype/lab_results.tsv and lab_results.json
-phenotype_dir = os.path.join(bids_dir, "phenotype")
-os.makedirs(phenotype_dir, exist_ok=True)
-
-lab_results_data = []
-for doc_no, sub_id in sub_id_mapping.items():
-    patient_rows = df[df[doc_no_col] == doc_no]
-    for _, row in patient_rows.iterrows():
-        lab_results_data.append({
+        # Add to anonymous data for participants.tsv
+        anonymous_data.append({
             "participant_id": f"sub-{sub_id}",
-            "test_name": row[hfl_name_col] if pd.notnull(row[hfl_name_col]) else "n/a",
-            "result": row[para_result_col] if pd.notnull(row[para_result_col]) else "n/a",
-            "unit": row[unit_col] if unit_col in df.columns and pd.notnull(row[unit_col]) else "n/a"
+            "age": age,
+            "sex": matched_row[GENDER_col].iloc[0].lower() if pd.notnull(matched_row[GENDER_col].iloc[0]) else "n/a",
+            "group": "n/a"  # Adjust if group info available
         })
 
-lab_results_df = pd.DataFrame(lab_results_data)
-lab_results_df.to_csv(os.path.join(phenotype_dir, "lab_results.tsv"), sep='\t', index=False)
+    # Create BIDS root files
+    os.makedirs(bids_dir, exist_ok=True)
 
-lab_results_json = {
-    "participant_id": {"Description": "Unique identifier for each participant"},
-    "test_name": {"Description": "Name of the lab test"},
-    "result": {"Description": "Result of the lab test"},
-    "unit": {"Description": "Unit of measurement for the result"}
-}
-with open(os.path.join(phenotype_dir, "lab_results.json"), 'w') as f:
-    json.dump(lab_results_json, f, indent=4)
+    # Create dataset_description.json
+    dataset_description = {
+        "Name": "EEG Clinical Dataset",
+        "BIDSVersion": "1.8.0",
+        "Authors": ["Your Name"],
+        "DatasetType": "raw"
+    }
+    with open(os.path.join(bids_dir, "dataset_description.json"), 'w') as f:
+        json.dump(dataset_description, f, indent=4)
 
-# Create anonymized XLSX
-anonymous_df = df.copy()
-anonymous_df[doc_no_col] = anonymous_df[doc_no_col].map(sub_id_mapping).fillna(anonymous_df[doc_no_col])
-anonymous_df = anonymous_df.drop(columns=[patient_name_col, birth_date_col], errors='ignore')
-anonymous_df.to_excel(anonymous_xlsx_path, index=False)
-print(f"Anonymous XLSX saved to: {anonymous_xlsx_path}")
+    # Create participants.tsv and participants.json
+    participants_df = pd.DataFrame(anonymous_data)
+    participants_df.to_csv(os.path.join(bids_dir, "participants.tsv"), sep='\t', index=False)
 
-print(f"BIDS dataset created in: {bids_dir}")
+    participants_json = {
+        "participant_id": {"Description": "Unique identifier for each participant"},
+        "age": {"Description": "Age of the participant in years", "Units": "years"},
+        "sex": {"Description": "Sex of the participant (male, female, or n/a)"},
+        "group": {"Description": "Clinical group"}
+    }
+    with open(os.path.join(bids_dir, "participants.json"), 'w') as f:
+        json.dump(participants_json, f, indent=4)
+
+    # Create phenotype/lab_results.tsv and lab_results.json
+    phenotype_dir = os.path.join(bids_dir, "phenotype")
+    os.makedirs(phenotype_dir, exist_ok=True)
+
+    lab_results_data = []
+    for doc_no, sub_id in sub_id_mapping.items():
+        patient_rows = df[df[doc_no_col] == doc_no]
+        for _, row in patient_rows.iterrows():
+            lab_results_data.append({
+                "participant_id": f"sub-{sub_id}",
+                "test_name": row[hfl_name_col] if pd.notnull(row[hfl_name_col]) else "n/a",
+                "result": row[para_result_col] if pd.notnull(row[para_result_col]) else "n/a",
+                "unit": row[unit_col] if unit_col in df.columns and pd.notnull(row[unit_col]) else "n/a"
+            })
+
+    lab_results_df = pd.DataFrame(lab_results_data)
+    lab_results_df.to_csv(os.path.join(phenotype_dir, "lab_results.tsv"), sep='\t', index=False)
+
+    lab_results_json = {
+        "participant_id": {"Description": "Unique identifier for each participant"},
+        "test_name": {"Description": "Name of the lab test"},
+        "result": {"Description": "Result of the lab test"},
+        "unit": {"Description": "Unit of measurement for the result"}
+    }
+    with open(os.path.join(phenotype_dir, "lab_results.json"), 'w') as f:
+        json.dump(lab_results_json, f, indent=4)
+
+    # Create anonymized XLSX
+    anonymous_df = df.copy()
+    anonymous_df[doc_no_col] = anonymous_df[doc_no_col].map(sub_id_mapping).fillna(anonymous_df[doc_no_col])
+    anonymous_df = anonymous_df.drop(columns=[patient_name_col, birth_date_col], errors='ignore')
+    anonymous_df.to_excel(anonymous_xlsx_path, index=False)
+    print(f"Anonymous XLSX saved to: {anonymous_xlsx_path}")
+
+    print(f"BIDS dataset created in: {bids_dir}")
+
+
+if __name__ == "__main__":
+    args = get_args()
+    create_bids(args)
+    print("DONE!")
