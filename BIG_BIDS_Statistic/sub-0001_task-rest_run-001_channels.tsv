@@ -1,0 +1,45 @@
+name	type	units	description	sampling_frequency	reference
+Fp1	eeg	uV	EEG channel	500.0	unknown
+Fp2	eeg	uV	EEG channel	500.0	unknown
+F3	eeg	uV	EEG channel	500.0	unknown
+F4	eeg	uV	EEG channel	500.0	unknown
+C3	eeg	uV	EEG channel	500.0	unknown
+C4	eeg	uV	EEG channel	500.0	unknown
+P3	eeg	uV	EEG channel	500.0	unknown
+P4	eeg	uV	EEG channel	500.0	unknown
+O1	eeg	uV	EEG channel	500.0	unknown
+O2	eeg	uV	EEG channel	500.0	unknown
+F7	eeg	uV	EEG channel	500.0	unknown
+F8	eeg	uV	EEG channel	500.0	unknown
+T3	eeg	uV	EEG channel	500.0	unknown
+T4	eeg	uV	EEG channel	500.0	unknown
+T5	eeg	uV	EEG channel	500.0	unknown
+T6	eeg	uV	EEG channel	500.0	unknown
+Fz	eeg	uV	EEG channel	500.0	unknown
+Cz	eeg	uV	EEG channel	500.0	unknown
+Pz	eeg	uV	EEG channel	500.0	unknown
+E	eeg	uV	EEG channel	500.0	unknown
+PG1	eeg	uV	EEG channel	500.0	unknown
+PG2	eeg	uV	EEG channel	500.0	unknown
+A1	eeg	uV	EEG channel	500.0	unknown
+A2	eeg	uV	EEG channel	500.0	unknown
+T1	eeg	uV	EEG channel	500.0	unknown
+T2	eeg	uV	EEG channel	500.0	unknown
+X1	eeg	uV	EEG channel	500.0	unknown
+X2	eeg	uV	EEG channel	500.0	unknown
+X3	eeg	uV	EEG channel	500.0	unknown
+X4	eeg	uV	EEG channel	500.0	unknown
+X5	eeg	uV	EEG channel	500.0	unknown
+X6	eeg	uV	EEG channel	500.0	unknown
+X7	eeg	uV	EEG channel	500.0	unknown
+SpO2	eeg	uV	EEG channel	500.0	unknown
+EtCO2	eeg	uV	EEG channel	500.0	unknown
+DC03	eeg	uV	EEG channel	500.0	unknown
+DC04	eeg	uV	EEG channel	500.0	unknown
+DC05	eeg	uV	EEG channel	500.0	unknown
+DC06	eeg	uV	EEG channel	500.0	unknown
+Pulse	eeg	uV	EEG channel	500.0	unknown
+CO2Wave	eeg	uV	EEG channel	500.0	unknown
+EEG Mark1	eeg	uV	EEG channel	500.0	unknown
+EEG Mark2	eeg	uV	EEG channel	500.0	unknown
+Events/Markers	eeg	uV	EEG channel	500.0	unknown

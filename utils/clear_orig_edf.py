@@ -1,11 +1,11 @@
 import os
 import glob
 
-root = "/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/bids_testing"
+root = "/mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/Test_Small_BIDS"
 
 def delete_original_edf(root):
     # Tìm tất cả file .edf đúng định dạng
-    pattern = os.path.join(root, "sub-*", "eeg", "sub-*_task-rest_eeg.edf.tmp")
+    pattern = os.path.join(root, "sub-*", "eeg", "sub-*_task-rest*_eeg.edf.tmp")
     edf_files = glob.glob(pattern)
 
     print(f"Tìm thấy {len(edf_files)} file EDF cần xoá.")

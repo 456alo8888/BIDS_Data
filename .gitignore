@@ -1,5 +1,4 @@
 bids_database 
-kqcls
 EEG2100 
 bids_dataset 
 trash
@@ -19,3 +18,4 @@ Test_EDF
 test_Small_BIDS 
 Small_BIDS 
 logging
+Small_BIDS_Non_Match

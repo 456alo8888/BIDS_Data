@@ -10,6 +10,7 @@ import glob
 from tqdm import tqdm
 import argparse
 import logging
+from collections import defaultdict
 
 # === Configuration ===
 # Paths
@@ -51,20 +52,13 @@ def get_args():
         required=True,
         help="BIDS database output directory"
     )
-    parser.add_argument(
-        "--test_result_dir",
-        type = str , 
-        default= "./matched_patients_translated_clean.xlsx",
-        required = True,
-        help = "Directory of test result"   
-    )
-
+    
     parser.add_argument(
         "--anonymous_xlsx_path",
         type=str,
         default= "./anonymous_patients.xlsx",
         required=True,
-        help="Anonymous XLSX output directory"
+        help="Anonymous XLSX test_result directory"
     )
     return parser.parse_args()
 
@@ -159,7 +153,7 @@ def calculate_age(birth_date, recording_date):
 # === Main Script ===
 # Load matched patients XLSX
 def load_patient_xlsx(args):
-    xlsx_path = args.test_result_dir
+    xlsx_path = args.anonymous_xlsx_path
     try:
         df = pd.read_excel(xlsx_path)
     except Exception as e:
@@ -204,19 +198,25 @@ def standardize_name(name: str, remove_spaces: bool = False) -> str:
 
 def create_bids(args):
     """
-    Create a BIDS dataset from EDF files, assigning a unique sub-id to each EDF file.
-    Ensure participants.tsv is sorted with no duplicates.
+    Create a BIDS dataset from EDF files, grouping files in the same parent folder as one subject.
+    Match only one file per group with xlsx; if no match, use EDF metadata or placeholder.
+    Save matched rows to phenotype/results.tsv with test results from HFL_NAME, PARA_RESULT, UNIT.
+    Create phenotype/results.json. Copy original EDF files without anonymization or export.
     """
     edf_dir = args.edf_dir
     bids_dir = args.bids_dir
-    doc_no_col = 'DOC_NO'  # Adjust if column name differs
-    birth_date_col = 'BIRTH_DATE'  # Adjust if column name differs
-    GENDER_col = 'GENDER'  # Adjust if column name differs
+    doc_no_col = 'DOC_NO'
+    patient_name_col = 'PATIENT_NAME'
+    birth_date_col = 'BIRTH_DATE'
+    GENDER_col = 'GENDER'
+    hfl_name_col = 'HFL_NAME'
+    para_result_col = 'PARA_RESULT'
+    unit_col = 'UNIT'
 
-    # Create BIDS root files
+    # Create BIDS root
     os.makedirs(bids_dir, exist_ok=True)
 
-    # Load existing participants.tsv to avoid duplicates
+    # Load existing participants.tsv
     participants_tsv = os.path.join(bids_dir, "participants.tsv")
     existing_participants = []
     if os.path.exists(participants_tsv):
@@ -224,181 +224,239 @@ def create_bids(args):
         existing_participants = existing_df.to_dict('records')
         logging.info(f"Loaded existing participants.tsv with {len(existing_participants)} entries")
 
-    anonymous_xlsx_path = args.anonymous_xlsx_path
+    # Load Excel data
     df = load_patient_xlsx(args)
-
-    # Standardize PATIENT_NAME
-    df["PATIENT_NAME_STD"] = df["PATIENT_NAME"].apply(
-        lambda x: standardize_name(x, remove_spaces=False)
-    )
-
-    # Create BIRTH_YEAR suffix
+    df["PATIENT_NAME_STD"] = df[patient_name_col].apply(lambda x: standardize_name(x, remove_spaces=False))
     df['BIRTH_YEAR'] = df[birth_date_col].apply(extract_birth_year_suffix)
 
-    # Group by DOC_NO for matching
-    aggregated_df = df.groupby(doc_no_col).agg({
-        'PATIENT_NAME_STD': 'first',
-        birth_date_col: 'first',
-        GENDER_col: 'first'
-    }).reset_index()
+    # Keep all rows (no aggregation) to preserve multiple test results per DOC_NO
+    # Filter relevant columns
+    excel_data = df[[doc_no_col, 'PATIENT_NAME_STD', birth_date_col, GENDER_col, hfl_name_col, para_result_col]]
 
-    # Get list of EDF files
-    edf_files = sorted(glob.glob(os.path.join(edf_dir, "*.edf")))  # Sort for consistency
+    # Collect EDF files recursively and group by parent folder
+    edf_files = glob.glob(os.path.join(edf_dir, "**", "*.edf"), recursive=True)
+    edf_files.extend(glob.glob(os.path.join(edf_dir, "**", "*.EDF"), recursive=True))
+    edf_groups = defaultdict(list)
+    for f in edf_files:
+        parent = os.path.dirname(f)  # Folder cha trực tiếp chứa .edf
+        edf_groups[parent].append(f)
 
-    # Track processed EDF files and sub-IDs
     processed_edf_files = set()
+    failed_files = []
     existing_subs = [d for d in os.listdir(bids_dir) if d.startswith('sub-') and os.path.isdir(os.path.join(bids_dir, d))]
     next_sub_id = len(existing_subs) + 1
     processed_sub_ids = {p['participant_id'] for p in existing_participants}
+    anonymous_data = existing_participants
 
-    # Collect anonymous patient data
-    anonymous_data = existing_participants  # Start with existing participants
-
-    # Process EDF files with progress bar
-    for edf_file in tqdm(edf_files, desc="Processing EDF files"):
-        logging.info(f"Processing {edf_file}...")
-        print(f"Processing {edf_file}...")
-
-        # Skip if EDF file already processed
-        if edf_file in processed_edf_files:
-            logging.info(f"Skipping {edf_file}: Already processed")
+    # Process each group (folder cha)
+    for folder, files in tqdm(edf_groups.items(), desc="Processing EDF folders"):
+        if not files:
             continue
 
-        # Check if EDF file is already in BIDS structure
-        skip = False
-        for sub_dir in existing_subs:
-            potential_edf = os.path.join(bids_dir, sub_dir, "eeg", f"{sub_dir}_task-rest_eeg.edf")
-            if os.path.exists(potential_edf):
-                try:
-                    if os.path.samefile(edf_file, potential_edf):
-                        logging.info(f"Skipping {edf_file}: Already processed as {sub_dir}")
-                        processed_edf_files.add(edf_file)
-                        skip = True
-                        break
-                except OSError:
-                    continue
-        if skip:
+        # Check if group already processed
+        if any(f in processed_edf_files for f in files):
+            logging.info(f"Skipping group {folder}: Already processed")
             continue
 
-        # Extract EDF metadata
-        name_only, sex, birth_suffix, sampling_rate, channel_types, recording_date, raw = extract_edf_metadata(edf_file)
-        if name_only is None:
-            logging.warning(f"Skipping {edf_file}: Could not extract metadata")
-            with open(os.path.join(bids_dir, "unmatched_edf_files.txt"), 'a') as f:
-                f.write(f"{edf_file}\n")
-            continue
-
-        edf_name_std = unidecode.unidecode(name_only).upper()
-
-        # Debug matching inputs
-        logging.info(f"EDF name: {name_only} (std: {edf_name_std}), birth_suffix: {birth_suffix}")
-        print(f"EDF name: {name_only} (std: {edf_name_std}), birth_suffix: {birth_suffix}")
-
-        # Match with aggregated_df
-        if birth_suffix and 'BIRTH_YEAR' in aggregated_df.columns and aggregated_df['BIRTH_YEAR'].notnull().any():
-            matched_row = aggregated_df[
-                (aggregated_df['PATIENT_NAME_STD'] == edf_name_std) &
-                (aggregated_df['BIRTH_YEAR'].str.endswith(str(birth_suffix), na=False))
-            ]
-        else:
-            matched_row = aggregated_df[
-                (aggregated_df['PATIENT_NAME_STD'] == edf_name_std)
-            ]
-
-        # Debug matching output
-        logging.info(f"Number of matches: {len(matched_row)}")
-        print(f"Number of matches: {len(matched_row)}")
-        if not matched_row.empty:
-            logging.info(f"Sample matched row: {matched_row.iloc[0].to_dict()}")
-            print(f"Sample matched row: {matched_row.iloc[0].to_dict()}")
-
-        if matched_row.empty:
-            logging.warning(f"No match found for EDF: {edf_file}")
-            print(f"No match found for EDF: {edf_file}")
-            with open(os.path.join(bids_dir, "unmatched_edf_files.txt"), 'a') as f:
-                f.write(f"{edf_file}\n")
-            continue
-
-        # Assign unique sub-ID for each EDF file
         sub_id = f"{next_sub_id:04d}"
         next_sub_id += 1
-
-        # Create BIDS directory for subject
         sub_dir = os.path.join(bids_dir, f"sub-{sub_id}")
         eeg_dir = os.path.join(sub_dir, "eeg")
         os.makedirs(eeg_dir, exist_ok=True)
 
-        # Export anonymized EDF
-        bids_edf = os.path.join(eeg_dir, f"sub-{sub_id}_task-rest_eeg.edf")
-        try:
-            raw.anonymize()
-            raw.export(bids_edf, fmt='EDF', overwrite=True)
-            logging.info(f"Exported anonymized EDF to {bids_edf}")
-        except Exception as e:
-            logging.warning(f"Failed to export EDF {edf_file}: {e}")
-            print(f"Warning: Failed to export EDF {edf_file}: {e}")
-            print(f"Copying original EDF file instead.")
+        participant_info = None
+        run_counter = 1
+        scans_data = []
+        matched_rows = None
+
+        # Try to extract metadata from first valid file
+        for edf_file in sorted(files):
+            try:
+                name_only, sex, birth_suffix, sampling_rate, channel_types, recording_date, raw = extract_edf_metadata(edf_file)
+                if name_only is not None:
+                    edf_name_std = unidecode.unidecode(name_only).upper()
+                    # Match with Excel
+                    if birth_suffix and 'BIRTH_YEAR' in excel_data.columns and excel_data['BIRTH_YEAR'].notnull().any():
+                        matched_rows = excel_data[
+                            (excel_data['PATIENT_NAME_STD'] == edf_name_std) &
+                            (excel_data['BIRTH_YEAR'].str.endswith(str(birth_suffix), na=False))
+                        ]
+                    else:
+                        matched_rows = excel_data[(excel_data['PATIENT_NAME_STD'] == edf_name_std)]
+
+                    if not matched_rows.empty:
+                        # Use matched info for participants.tsv
+                        birth_date = matched_rows[birth_date_col].iloc[0]
+                        age = calculate_age(birth_date, recording_date) if birth_date and recording_date else "n/a"
+                        sex_str = matched_rows[GENDER_col].iloc[0].lower() if pd.notnull(matched_rows[GENDER_col].iloc[0]) else "n/a"
+                        participant_info = {
+                            "age": str(age) if age is not None else "n/a",
+                            "sex": sex_str,
+                            "group": "n/a"
+                        }
+                        # Save test results to phenotype/results.tsv
+                        phenotype_dir = os.path.join(bids_dir, "phenotype")
+                        os.makedirs(phenotype_dir, exist_ok=True)
+                        results_tsv = os.path.join(phenotype_dir, "results.tsv")
+                        test_data = []
+                        for _, row in matched_rows.iterrows():
+                            if pd.notnull(row[hfl_name_col]) and pd.notnull(row[para_result_col]):
+                                test_data.append({
+                                    'participant_id': f"sub-{sub_id}",
+                                    'test_name': str(row[hfl_name_col]),
+                                    'result': str(row[para_result_col]),
+                                    'unit': str(row[unit_col]) if pd.notnull(row.get(unit_col)) else 'n/a'
+                                })
+                        matched_df = pd.DataFrame(test_data)
+                        if os.path.exists(results_tsv):
+                            existing_results = pd.read_csv(results_tsv, sep='\t')
+                            matched_df = pd.concat([existing_results, matched_df], ignore_index=True)
+                        matched_df.to_csv(results_tsv, sep='\t', index=False)
+                        logging.info(f"Saved matched test results for sub-{sub_id} to {results_tsv}")
+                    else:
+                        # Use EDF metadata
+                        logging.warning(f"No match for group {folder}. Using EDF metadata.")
+                        with open(os.path.join(bids_dir, "unmatched_edf_groups.txt"), 'a') as f:
+                            f.write(f"{folder}\n")
+                        birth_year = extract_birth_year_suffix(raw.info.get('subject_info', {}), birth_suffix)
+                        age = calculate_age(birth_year, recording_date) if birth_year else "n/a"
+                        sex_str = ("male" if sex == 2 else "female") if sex is not None else "n/a"
+                        participant_info = {
+                            "age": str(age) if age is not None else "n/a",
+                            "sex": sex_str,
+                            "group": "n/a"
+                        }
+                    break  # Stop after finding first valid file
+            except Exception as e:
+                logging.warning(f"Failed to read metadata from {edf_file}: {e}")
+                continue
+
+        # If no valid metadata, use placeholder
+        if participant_info is None:
+            logging.warning(f"No valid metadata for group {folder}. Using placeholder.")
+            with open(os.path.join(bids_dir, "unmatched_edf_groups.txt"), 'a') as f:
+                f.write(f"{folder}\n")
+            participant_info = {
+                "age": "n/a",
+                "sex": "n/a",
+                "group": "n/a"
+            }
+
+        # Add participant info
+        anonymous_data.append({
+            "participant_id": f"sub-{sub_id}",
+            **participant_info
+        })
+        processed_sub_ids.add(f"sub-{sub_id}")
+
+        # Process all files in group as runs
+        for edf_file in sorted(files):
+            try:
+                name_only, sex, birth_suffix, sampling_rate, channel_types, recording_date, raw = extract_edf_metadata(edf_file)
+                success = True
+            except Exception:
+                name_only = None
+                success = False
+                failed_files.append(edf_file)
+
+            run_id = f"{run_counter:03d}"
+            bids_base = f"sub-{sub_id}_task-rest_run-{run_id}"
+            bids_edf = os.path.join(eeg_dir, f"{bids_base}_eeg.edf")
+
+            # Copy original file
             shutil.copy(edf_file, bids_edf)
             logging.info(f"Copied original EDF to {bids_edf}")
 
-        # Create eeg.json
-        eeg_metadata = {
-            "TaskName": "rest",
-            "EEGReference": "unknown",
-            "SamplingFrequency": sampling_rate,
-            "PowerLineFrequency": 50,  # Adjust if needed (50 Hz for Europe, 60 Hz for US)
-            "EEGChannelCount": len(channel_types),
-            "SoftwareFilters": "n/a",
-            "RecordingDuration": raw.times[-1] if raw.times.size > 0 else "n/a"
-        }
-        with open(os.path.join(eeg_dir, f"sub-{sub_id}_task-rest_eeg.json"), 'w') as f:
-            json.dump(eeg_metadata, f, indent=4)
-            logging.info(f"Created eeg.json for sub-{sub_id}")
+            # Create eeg.json and channels.tsv
+            if name_only is None:
+                eeg_metadata = {
+                    "TaskName": "rest",
+                    "EEGReference": "unknown",
+                    "SamplingFrequency": "n/a",
+                    "PowerLineFrequency": "n/a",
+                    "EEGChannelCount": "n/a",
+                    "SoftwareFilters": "n/a",
+                    "RecordingDuration": "n/a",
+                    "Note": "⚠️ EDF file could not be parsed"
+                }
+                channels_data = pd.DataFrame([{
+                    "name": "n/a",
+                    "type": "n/a",
+                    "units": "n/a",
+                    "description": "EDF file not readable",
+                    "sampling_frequency": "n/a",
+                    "reference": "unknown"
+                }])
+            else:
+                eeg_metadata = {
+                    "TaskName": "rest",
+                    "EEGReference": "unknown",
+                    "SamplingFrequency": sampling_rate,
+                    "PowerLineFrequency": 50,
+                    "EEGChannelCount": len(channel_types),
+                    "SoftwareFilters": "n/a",
+                    "RecordingDuration": raw.times[-1] if raw.times.size > 0 else "n/a"
+                }
+                channels_data = pd.DataFrame({
+                    "name": list(channel_types.keys()),
+                    "type": list(channel_types.values()),
+                    "units": ["uV"] * len(channel_types),
+                    "description": ["EEG channel"] * len(channel_types),
+                    "sampling_frequency": [sampling_rate] * len(channel_types),
+                    "reference": ["unknown"] * len(channel_types)
+                })
 
-        # Create channels.tsv
-        channels_data = pd.DataFrame({
-            "name": list(channel_types.keys()),
-            "type": list(channel_types.values()),
-            "units": ["uV"] * len(channel_types),
-            "description": ["EEG channel"] * len(channel_types),
-            "sampling_frequency": [sampling_rate] * len(channel_types),
-            "reference": ["unknown"] * len(channel_types)
-        })
-        channels_data.to_csv(os.path.join(eeg_dir, f"sub-{sub_id}_task-rest_channels.tsv"), sep='\t', index=False)
-        logging.info(f"Created channels.tsv for sub-{sub_id}")
+            with open(os.path.join(eeg_dir, f"{bids_base}_eeg.json"), 'w') as f:
+                json.dump(eeg_metadata, f, indent=4)
+            channels_data.to_csv(os.path.join(eeg_dir, f"{bids_base}_channels.tsv"), sep='\t', index=False)
 
-        # Add to anonymous data
-        birth_date = matched_row[birth_date_col].iloc[0]
-        age = calculate_age(birth_date, recording_date)
-        anonymous_data.append({
-            "participant_id": f"sub-{sub_id}",
-            "age": age,
-            "sex": matched_row[GENDER_col].iloc[0].lower() if pd.notnull(matched_row[GENDER_col].iloc[0]) else "n/a",
-            "group": "n/a"
-        })
-        processed_sub_ids.add(f"sub-{sub_id}")
-        processed_edf_files.add(edf_file)
-        logging.info(f"Added participant sub-{sub_id} for EDF {edf_file} to anonymous_data")
+            # Add to scans.tsv
+            acq_time = recording_date.strftime("%Y-%m-%dT%H:%M:%S") if success and recording_date and isinstance(recording_date, datetime) else "n/a"
+            scans_data.append({
+                "filename": os.path.relpath(bids_edf, start=sub_dir),
+                "acq_time": acq_time
+            })
 
-    # Sort anonymous_data by participant_id
+            processed_edf_files.add(edf_file)
+            run_counter += 1
+
+        # Write scans.tsv
+        scans_df = pd.DataFrame(scans_data)
+        scans_tsv = os.path.join(sub_dir, f"sub-{sub_id}_scans.tsv")
+        scans_df.to_csv(scans_tsv, sep='\t', index=False)
+
+    # Write failed files
+    if failed_files:
+        pd.DataFrame({"failed_file": failed_files}).to_csv(os.path.join(bids_dir, "failed_files.tsv"), sep='\t', index=False)
+        print(f"⚠️ {len(failed_files)} EDF files failed to parse. See failed_files.tsv")
+
+    # Sort and write participants.tsv
     anonymous_data = sorted(anonymous_data, key=lambda x: int(x["participant_id"].split('-')[1]))
-
-    # Write participants.tsv
     participants_df = pd.DataFrame(anonymous_data)
-    participants_tsv = os.path.join(bids_dir, "participants.tsv")
     participants_df.to_csv(participants_tsv, sep='\t', index=False)
-    logging.info(f"Wrote sorted participants.tsv to {participants_tsv}")
 
     # Write participants.json
     participants_json = {
         "participant_id": {"Description": "Unique participant identifier"},
-        "age": {"Description": "Age of the participant in years at the time of recording", "Units": "years"},
-        "sex": {"Description": "Sex of the participant", "Levels": {"male": "Male", "female": "Female", "n/a": "Not available"}},
-        "group": {"Description": "Group affiliation of the participant", "Levels": {"n/a": "Not available"}}
+        "age": {"Description": "Age of the participant in years", "Units": "years"},
+        "sex": {"Description": "Sex of the participant (male, female, or n/a)"},
+        "group": {"Description": "Clinical group"}
     }
     with open(os.path.join(bids_dir, "participants.json"), 'w') as f:
         json.dump(participants_json, f, indent=4)
-        logging.info(f"Created participants.json")
+
+    # Write phenotype/results.json
+    results_json = {
+        "participant_id": {"Description": "Unique identifier for each participant"},
+        "test_name": {"Description": "Name of the lab test"},
+        "result": {"Description": "Result of the lab test"},
+        "unit": {"Description": "Unit of measurement for the result"}
+    }
+    phenotype_dir = os.path.join(bids_dir, "phenotype")
+    os.makedirs(phenotype_dir, exist_ok=True)
+    with open(os.path.join(phenotype_dir, "results.json"), 'w') as f:
+        json.dump(results_json, f, indent=4)
+        logging.info("Created phenotype/results.json")
 
     # Write dataset_description.json
     dataset_description = {
@@ -410,12 +468,15 @@ def create_bids(args):
     }
     with open(os.path.join(bids_dir, "dataset_description.json"), 'w') as f:
         json.dump(dataset_description, f, indent=4)
-        logging.info(f"Created dataset_description.json")
 
     print(f"Completed. Participants saved to: {participants_tsv}")
     logging.info(f"Completed BIDS creation. Participants saved to: {participants_tsv}")
 
 if __name__ == "__main__":
-    args = get_args()
+    import argparse
+    parser = argparse.ArgumentParser(description="Create BIDS dataset from EDF files")
+    parser.add_argument('--edf_dir', type=str, required=True, help="Directory containing EDF files")
+    parser.add_argument('--bids_dir', type=str, required=True, help="Output BIDS directory")
+    parser.add_argument('--anonymous_xlsx_path', type=str, required=True, help="Path to Excel file with patient info")
+    args = parser.parse_args()
     create_bids(args)
-    print("DONE!")

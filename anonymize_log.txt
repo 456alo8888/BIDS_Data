@@ -1,0 +1,12 @@
+2025-09-25 09:40:40,092 - Overwrote /mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/Test_Small_BIDS/sub-0001/eeg/sub-0001_task-rest_run-001_eeg.edf
+2025-09-25 09:40:40,210 - Overwrote /mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/Test_Small_BIDS/sub-0002/eeg/sub-0002_task-rest_run-001_eeg.edf
+2025-09-25 09:40:40,264 - Overwrote /mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/Test_Small_BIDS/sub-0002/eeg/sub-0002_task-rest_run-002_eeg.edf
+2025-09-25 09:40:40,431 - Overwrote /mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/Test_Small_BIDS/sub-0003/eeg/sub-0003_task-rest_run-001_eeg.edf
+2025-09-25 09:40:40,445 - Overwrote /mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/Test_Small_BIDS/sub-0004/eeg/sub-0004_task-rest_run-001_eeg.edf
+2025-09-25 09:40:40,540 - Overwrote /mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/Test_Small_BIDS/sub-0004/eeg/sub-0004_task-rest_run-002_eeg.edf
+2025-09-25 09:40:40,657 - Overwrote /mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/Test_Small_BIDS/sub-0005/eeg/sub-0005_task-rest_run-001_eeg.edf
+2025-09-25 09:40:40,748 - Overwrote /mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/Test_Small_BIDS/sub-0006/eeg/sub-0006_task-rest_run-001_eeg.edf
+2025-09-25 09:40:40,919 - Overwrote /mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/Test_Small_BIDS/sub-0007/eeg/sub-0007_task-rest_run-001_eeg.edf
+2025-09-25 09:40:40,928 - Overwrote /mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/Test_Small_BIDS/sub-0007/eeg/sub-0007_task-rest_run-002_eeg.edf
+2025-09-25 09:40:41,208 - Overwrote /mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/Test_Small_BIDS/sub-0007/eeg/sub-0007_task-rest_run-003_eeg.edf
+2025-09-25 09:40:41,208 - Completed. Mapping saved to: /mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/Test_Small_BIDS/mapping_original_to_sub_1.csv, Skipped files: /mnt/disk1/aiotlab/hieupc/New_CBraMod/BIDS/Test_Small_BIDS/skipped_files.csv
